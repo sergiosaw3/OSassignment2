@@ -274,14 +274,34 @@ static int try_password(size_t *remainder, const char *str) {
 
 */
 int main(int argc, char **argv) {
-  size_t *s = 0;
-  int e = 2;
-  //int e = try_password(0,"mezcal");
-  //try_password(s,"mezcal");
-  printf("%d\n", e);
-  // STUB, TODO
+  char all_chars[] = "abcdefghijklmnopqrstuvwyzABCDEFGHIJKLMNOPQRSYUVWXYZ0123456789!@#$%&*_-+<>/";
+  size_t remainder = ((size_t) 15);
+  size_t prev_remainder = ((size_t) 15);
+  int index;
+  int count=0;
+  int status;
+  char password[] = "^^^^^^^^^^^^^^^";
   
+  while((status=try_password(&remainder, password)) != 0){
+    if(status==-1){
+      fprintf(stderr,"Error: %s , cannot get password.\n",strerror(errno));
+      return 1;
+    }
+    if(remainder != prev_remainder){
+      prev_remainder = remainder;
+      index = 0;
+    }
 
-  return 1;
+    password[16-prev_remainder-1] = all_chars[index++];
+
+    if(index>=(strlen(all_chars))){
+      printf("Could not get the password\n");
+      return 1;
+    }
+    count++;
+  }
+  
+  printf("Successfully got the password. Password: %s\n",password);
+  return 0;
 }
 
