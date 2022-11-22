@@ -239,6 +239,56 @@
 
 /* YOUR HELPER FUNCTIONS GO HERE */
 
+typedef size_t off_t;
+//typedef enum reg_value;                 add enum for reg file and directory
+
+struct __myfs_memory_block_struct{
+      size_t size;
+      size_t user_size;
+      off_t next;
+}; typedef struct __myfs_memory_block_struct *__myfs_memory_block_t;
+
+struct __myfs_handle_struct{
+      uint32_t magic;
+      off_t free_memory;
+      off_t root_dir;
+      size_t size;
+}; typedef struct __myfs_handle_struct *__myfs_handle_t;
+
+struct __myfs_inode_file_struct_t{
+      size_t size;
+      off_t first_block;
+}; typedef struct __myfs_inode_file_struct_t __myfs_inode_file_t;
+
+struct __myfs_file_block_struct_t{
+      size_t size;
+      size_t allocated;
+      off_t next;
+      off_t data;
+}; typedef struct __myfs_file_block_struct_t __myfs_file_block_t;
+
+struct __myfs_inode_directory_struct_t{
+      size_t number_children;
+      off_t children;
+}; typedef struct __myfs_inode_directory_struct_t __myfs_inode_directory_t;
+
+#define MYFS_MAXIMUM_NAME_LENGTH (255)
+#define MYFS_STATIC_PATH_BUF_SIZE (8192)
+#define MYFS_TRUNCATE_SMALL_ALLOCATE ((size_t) 512)
+#define MYFS_MAGIC (0xCAFEBABE)
+
+struct __myfs_inode_struct_t{
+      __myfs_inode_type_t type;
+      char name[MYFS_MAXIMUM_NAME_LENGTH];
+      struct timespec times[2];
+      union{
+            __myfs_inode_file_t file;
+            __myfs_indoe_directory_t directory;
+      } value;
+}; typedef struct __myfs_inode_struct_t __myfs_inode_t;
+
+
+
 /* End of helper functions */
 
 /* Implements an emulation of the stat system call on the filesystem 
