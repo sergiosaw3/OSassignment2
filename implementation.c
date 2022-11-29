@@ -287,8 +287,17 @@ struct __myfs_inode_struct_t{
       } value;
 }; typedef struct __myfs_inode_struct_t __myfs_inode_t;
 
+void *__off_to_ptr(__myfs_handle_t handle, off_t offset) {
+  if (offset == 0) return NULL;
+  if (handle == NULL) return NULL;
+  return (void *)(handle + offset);
+}
 
-
+off_t __ptr_to_off(__myfs_handle_t handle, void *ptr) {
+  if (ptr == NULL) return 0;
+  
+  return (off_t) (handle - ptr);
+}
 /* End of helper functions */
 
 /* Implements an emulation of the stat system call on the filesystem 
