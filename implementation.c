@@ -242,6 +242,12 @@
 typedef size_t off_t;
 //typedef enum reg_value;                 add enum for reg file and directory
 
+typedef enum
+{
+    DIRECTORY,
+    REG_FILE
+} __myfs_inode_type_t;
+
 struct __myfs_memory_block_struct{
       size_t size;
       size_t user_size;
@@ -299,6 +305,12 @@ off_t __ptr_to_off(__myfs_handle_t handle, void *ptr) {
   return (off_t) (handle - ptr);
 }
 /* End of helper functions */
+
+/* Memory housekeeping functions*/
+
+
+
+/* End of Memory Functions */
 
 /* Implements an emulation of the stat system call on the filesystem 
    of size fssize pointed to by fsptr. 
