@@ -296,7 +296,7 @@ void *__off_to_ptr(__myfs_handle_t handle, off_t offset) {
 off_t __ptr_to_off(__myfs_handle_t handle, void *ptr) {
   if (ptr == NULL) return 0;
   
-  return (off_t) (handle - ptr);
+  return (off_t) (ptr - handle);
 }
 /* End of helper functions */
 
