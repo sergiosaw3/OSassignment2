@@ -307,6 +307,84 @@ off_t __ptr_to_off(__myfs_handle_t handle, void *ptr) {
 /* End of helper functions */
 
 /* Memory housekeeping functions*/
+static int __try_size_t_multiply(size_t *c, size_t a, size_t b) {
+  size_t t, r, q;
+
+  /* If any of the arguments a and b is zero, everthing works just fine. */
+  if ((a == ((size_t) 0)) ||
+      (b == ((size_t) 0))) {
+    *c = a * b;
+    return 1;
+  }
+
+  /* Here, neither a nor b is zero. 
+     We perform the multiplication, which may overflow, i.e. present
+     some modulo-behavior.
+  */
+  t = a * b;
+
+  /* Perform Euclidian division on t by a:
+     t = a * q + r
+     As we are sure that a is non-zero, we are sure
+     that we will not divide by zero.
+  */
+  q = t / a;
+  r = t % a;
+
+  /* If the rest r is non-zero, the multiplication overflowed. */
+  if (r != ((size_t) 0)) return 0;
+
+  /* Here the rest r is zero, so we are sure that t = a * q.
+     If q is different from b, the multiplication overflowed.
+     Otherwise we are sure that t = a * b.
+  */
+  if (q != b) return 0;
+  *c = t;
+  return 1;
+}
+
+
+/* returns the offset of the start of the data section of the memory block */
+off_t __allocate_mem_block(__myfs_handle_t handle, size_t rawsize) {
+	size_t nmemb, size;
+	__myfs_memory_block_t prev, curr, new;
+	
+	if (rawsize == ((size_t) 0)) return 0;
+  
+  size = rawsize-((size_t)1);
+  nmemb = size + sizeof(struct __myfs_memory_block_struct);
+  if (nmemb < size) return 0;
+	
+	nmemb /= sizeof(memory_block_t);
+	if (!__try_size_t_multiply(&size, nmemb, sizeof(memory_block_t))) return 0;
+	/* 	*/
+	for(curr = (__myfs_memory_block_t) __off_to_ptr(handle, handle->free_memory), prev = NULL;
+      curr != NULL;
+      curr = (__myfs_memory_block_t) __off_to_ptr(handle, (prev = curr)->next)) {
+
+    if (curr->size >= size) {
+      if ((curr->size - size) < sizeof(struct __myfs_memory_block_struct)) {
+				if (prev == NULL) {
+					handle->free_memory = curr->next;
+				}else{
+					prev->next = curr->next;
+				}
+				return __ptr_to_off(handle, ((void*)curr)+sizeof(struct __myfs_memory_block_struct));
+      }else{
+				new = (__myfs_memory_block_t) (((void *) curr) + size);
+				new->size = curr->size - size;
+				new->next = curr->next;
+				if (prev == NULL) {
+					handle->free_memory = __ptr_to_off(handle, new);
+				}else{
+					prev->next = __ptr_to_off(handle,new);
+				}
+				curr->size = size;
+				return __ptr_to_off(handle, ((void*)curr)+sizeof(struct __myfs_memory_block_struct));
+      }
+    }
+	}
+}
 
 
 
