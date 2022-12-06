@@ -126,7 +126,7 @@
          Check that the filesystem does not get reinitialized at mount
          time if you initialized it once and unmounted it but that all
          pieces of information (in the handle) get read back correctly
-         from the backup-file. 
+         from the backup-file.
 
    (2)   Design and implement functions to find and allocate free memory
          regions inside the filesystem memory space. There need to be 
@@ -236,46 +236,44 @@
 */
 
 /* Helper types and functions */
-
-/* YOUR HELPER FUNCTIONS GO HERE */
-
-typedef size_t off_t;
 //typedef enum reg_value;                 add enum for reg file and directory
 
-typedef enum
+enum __myfs_inode_enum_type_t                /* as in the first example */
 {
     DIRECTORY,
-    REG_FILE
-} __myfs_inode_type_t;
+    REGFILE
+};
+
+typedef enum __myfs_inode_enum_type_t __myfs_inode_type_t;
 
 struct __myfs_memory_block_struct{
-      size_t size;
-      size_t user_size;
-      off_t next;
+    size_t size;
+    size_t user_size;
+    off_t next;
 }; typedef struct __myfs_memory_block_struct *__myfs_memory_block_t;
 
 struct __myfs_handle_struct{
-      uint32_t magic;
-      off_t free_memory;
-      off_t root_dir;
-      size_t size;
+    uint32_t magic;  //
+    size_t size;
+    off_t free_memory;
+    off_t root_dir;
 }; typedef struct __myfs_handle_struct *__myfs_handle_t;
 
 struct __myfs_inode_file_struct_t{
-      size_t size;
-      off_t first_block;
+    size_t size;
+    off_t first_block;
 }; typedef struct __myfs_inode_file_struct_t __myfs_inode_file_t;
 
 struct __myfs_file_block_struct_t{
-      size_t size;
-      size_t allocated;
-      off_t next;
-      off_t data;
+    size_t size;
+    size_t allocated;
+    off_t next;
+    off_t data;
 }; typedef struct __myfs_file_block_struct_t __myfs_file_block_t;
 
 struct __myfs_inode_directory_struct_t{
-      size_t number_children;
-      off_t children;
+    size_t number_children;
+    off_t children;
 }; typedef struct __myfs_inode_directory_struct_t __myfs_inode_directory_t;
 
 #define MYFS_MAXIMUM_NAME_LENGTH (255)
@@ -284,108 +282,110 @@ struct __myfs_inode_directory_struct_t{
 #define MYFS_MAGIC (0xCAFEBABE)
 
 struct __myfs_inode_struct_t{
-      __myfs_inode_type_t type;
-      char name[MYFS_MAXIMUM_NAME_LENGTH];
-      struct timespec times[2];
-      union{
-            __myfs_inode_file_t file;
-            __myfs_indoe_directory_t directory;
-      } value;
+    __myfs_inode_type_t type;
+    char name[MYFS_MAXIMUM_NAME_LENGTH];
+    struct timespec times[2];
+    union{
+        __myfs_inode_file_t file;
+        __myfs_inode_directory_t directory;
+    } value;
 }; typedef struct __myfs_inode_struct_t __myfs_inode_t;
 
+
+
+/* YOUR HELPER FUNCTIONS GO HERE */
+
 void *__off_to_ptr(__myfs_handle_t handle, off_t offset) {
-  if (offset == 0) return NULL;
-  if (handle == NULL) return NULL;
-  return (void *)(((void *)handle) + offset);
+    //if (offset == 0) return NULL;
+    if (handle == NULL) return NULL;
+    return (void *)(((void *)handle) + offset);
 }
 
 off_t __ptr_to_off(__myfs_handle_t handle, void *ptr) {
-  if (ptr == NULL) return 0;
-  
-  return (off_t) (ptr - (void *)handle);
-}
-/* End of helper functions */
+    if (ptr == NULL) return 0;
 
+    return (off_t) (ptr - (void *)handle);
+}
 /* Memory housekeeping functions*/
 static int __try_size_t_multiply(size_t *c, size_t a, size_t b) {
-  size_t t, r, q;
+    size_t t, r, q;
 
-  /* If any of the arguments a and b is zero, everthing works just fine. */
-  if ((a == ((size_t) 0)) ||
-      (b == ((size_t) 0))) {
-    *c = a * b;
+    /* If any of the arguments a and b is zero, everthing works just fine. */
+    if ((a == ((size_t) 0)) ||
+        (b == ((size_t) 0))) {
+        *c = a * b;
+        return 1;
+    }
+
+    /* Here, neither a nor b is zero.
+       We perform the multiplication, which may overflow, i.e. present
+       some modulo-behavior.
+    */
+    t = a * b;
+
+    /* Perform Euclidian division on t by a:
+       t = a * q + r
+       As we are sure that a is non-zero, we are sure
+       that we will not divide by zero.
+    */
+    q = t / a;
+    r = t % a;
+
+    /* If the rest r is non-zero, the multiplication overflowed. */
+    if (r != ((size_t) 0)) return 0;
+
+    /* Here the rest r is zero, so we are sure that t = a * q.
+       If q is different from b, the multiplication overflowed.
+       Otherwise we are sure that t = a * b.
+    */
+    if (q != b) return 0;
+    *c = t;
     return 1;
-  }
-
-  /* Here, neither a nor b is zero. 
-     We perform the multiplication, which may overflow, i.e. present
-     some modulo-behavior.
-  */
-  t = a * b;
-
-  /* Perform Euclidian division on t by a:
-     t = a * q + r
-     As we are sure that a is non-zero, we are sure
-     that we will not divide by zero.
-  */
-  q = t / a;
-  r = t % a;
-
-  /* If the rest r is non-zero, the multiplication overflowed. */
-  if (r != ((size_t) 0)) return 0;
-
-  /* Here the rest r is zero, so we are sure that t = a * q.
-     If q is different from b, the multiplication overflowed.
-     Otherwise we are sure that t = a * b.
-  */
-  if (q != b) return 0;
-  *c = t;
-  return 1;
 }
 
 
 /* returns the offset of the start of the data section of the memory block */
 off_t __allocate_mem_block(__myfs_handle_t handle, size_t rawsize) {
-	size_t nmemb, size;
-	__myfs_memory_block_t prev, curr, new;
-	
-	if (rawsize == ((size_t) 0)) return 0;
-  
-  size = rawsize-((size_t)1);
-  nmemb = size + sizeof(struct __myfs_memory_block_struct);
-  if (nmemb < size) return 0;
-	
-	nmemb /= sizeof(memory_block_t);
-	if (!__try_size_t_multiply(&size, nmemb, sizeof(memory_block_t))) return 0;
-	/* 	*/
-	for(curr = (__myfs_memory_block_t) __off_to_ptr(handle, handle->free_memory), prev = NULL;
-      curr != NULL;
-      curr = (__myfs_memory_block_t) __off_to_ptr(handle, (prev = curr)->next)) {
+    size_t nmemb, size;
+    __myfs_memory_block_t prev, curr, new;
 
-    if (curr->size >= size) {
-      if ((curr->size - size) < sizeof(struct __myfs_memory_block_struct)) {
-				if (prev == NULL) {
-					handle->free_memory = curr->next;
-				}else{
-					prev->next = curr->next;
-				}
-				return __ptr_to_off(handle, ((void*)curr)+sizeof(struct __myfs_memory_block_struct));
-      }else{
-				new = (__myfs_memory_block_t) (((void *) curr) + size);
-				new->size = curr->size - size;
-				new->next = curr->next;
-				if (prev == NULL) {
-					handle->free_memory = __ptr_to_off(handle, new);
-				}else{
-					prev->next = __ptr_to_off(handle,new);
-				}
-				curr->size = size;
-				return __ptr_to_off(handle, ((void*)curr)+sizeof(struct __myfs_memory_block_struct));
-      }
+    if (rawsize == ((size_t) 0)) return 0;
+
+    size = rawsize-((size_t)1);
+    nmemb = size + sizeof(struct __myfs_memory_block_struct);
+    if (nmemb < size) return 0;
+
+    nmemb /= sizeof(struct __myfs_memory_block_struct);
+    if(!__try_size_t_multiply(&size, nmemb, sizeof(struct __myfs_memory_block_struct))) return 0;
+    /* 	*/
+    for(curr = (__myfs_memory_block_t) __off_to_ptr(handle, handle->free_memory), prev = NULL;
+        curr != NULL;
+        curr = (__myfs_memory_block_t) __off_to_ptr(handle, (prev = curr)->next)) {
+
+        if (curr->size >= size) {
+            if ((curr->size - size) < sizeof(struct __myfs_memory_block_struct)) {
+                if (prev == NULL) {
+                    handle->free_memory = curr->next;
+                }else{
+                    prev->next = curr->next;
+                }
+                return __ptr_to_off(handle, ((void*)curr)+sizeof(struct __myfs_memory_block_struct));
+            }else{
+                new = (__myfs_memory_block_t) (((void *) curr) + size);
+                new->size = curr->size - size;
+                new->next = curr->next;
+                if (prev == NULL) {
+                    handle->free_memory = __ptr_to_off(handle, new);
+                }else{
+                    prev->next = __ptr_to_off(handle,new);
+                }
+                curr->size = size;
+                return __ptr_to_off(handle, ((void*)curr)+sizeof(struct __myfs_memory_block_struct));
+            }
+        }
     }
-	}
+    return 0;
 }
-
 /*
 Takes the handle and offset of the beginning of the data of a memory block
         The data comes right after the header.
@@ -421,6 +421,7 @@ void __free_mem_block(__myfs_handle_t handle, off_t block_offset) {
 }
 
 
+
 __myfs_handle_t __myfs_get_handle(void *fsptr, size_t fssize){
     __myfs_handle_t handle;
     size_t s;
@@ -435,28 +436,28 @@ __myfs_handle_t __myfs_get_handle(void *fsptr, size_t fssize){
     printf("handle error magic: %x\n",handle->magic);
 
     //if(handle->magic != MYFS_MAGIC){
-    s = fssize - sizeof(__myfs_handle_t);
-    if(handle->magic != ((uint32_t)0)){
-        memset((fsptr + sizeof(__myfs_handle_t)), 0, s);
-    }
-    strcpy(root->name,"");
-    root->type = DIRECTORY;
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME,&ts);
-    root->times[0] = ts;
-    root->times[1] = ts;
-    root->value.directory.number_children = 0;
-    root->value.directory.children = (off_t) 0;
+        s = fssize - sizeof(__myfs_handle_t);
+        if(handle->magic != ((uint32_t)0)){
+            memset((fsptr + sizeof(__myfs_handle_t)), 0, s);
+        }
+        strcpy(root->name,"");
+        root->type = DIRECTORY;
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME,&ts);
+        root->times[0] = ts;
+        root->times[1] = ts;
+        root->value.directory.number_children = 0;
+        root->value.directory.children = (off_t) 0;
 
 
-    handle->root_dir = (off_t) __ptr_to_off(handle,root);
+        handle->root_dir = (off_t) __ptr_to_off(handle,root);
 
 
-    handle->magic = MYFS_MAGIC;
-    handle->size = s;
-    if(handle->size == ((size_t) 0)){
-        handle->free_memory = (off_t) 0;
-    }
+        handle->magic = MYFS_MAGIC;
+        handle->size = s;
+        if(handle->size == ((size_t) 0)){
+            handle->free_memory = (off_t) 0;
+        }
     //}
     /*else{
         printf("THIS NULL");
@@ -512,7 +513,7 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, char *path){
     }
     return curr;
 }
-/* End of Memory Functions */
+/* End of helper functions */
 
 /* Implements an emulation of the stat system call on the filesystem 
    of size fssize pointed to by fsptr. 
@@ -542,7 +543,7 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, char *path){
 */
 int __myfs_getattr_implem(void *fsptr, size_t fssize, int *errnoptr,
                           uid_t uid, gid_t gid,
-                          const char *path, struct stat *stbuf) {
+                           char *path, struct stat *stbuf) {
     __myfs_handle_t handle;
     __myfs_inode_t *node;
     printf("FS PTR: %p\n",fsptr);
@@ -632,6 +633,7 @@ int __myfs_getattr_implem(void *fsptr, size_t fssize, int *errnoptr,
 int __myfs_readdir_implem(void *fsptr, size_t fssize, int *errnoptr,
                           const char *path, char ***namesptr) {
   /* STUB */
+
   return -1;
 }
 
