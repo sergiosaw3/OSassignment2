@@ -386,8 +386,132 @@ off_t __allocate_mem_block(__myfs_handle_t handle, size_t rawsize) {
 	}
 }
 
+/*
+Takes the handle and offset of the beginning of the data of a memory block
+        The data comes right after the header.
+*/
+void __free_mem_block(__myfs_handle_t handle, off_t block_offset) {
+    __myfs_memory_block_t prev, curr, block;
+    prev = NULL;
+    curr = (__myfs_memory_block_t) __off_to_ptr(handle, handle->free_memory);
+    block = (__myfs_memory_block_t) __off_to_ptr(handle, block_offset - sizeof(struct __myfs_memory_block_struct));
+
+    /* Fenceposting */
+    for(curr = (__myfs_memory_block_t) __off_to_ptr(handle, handle->free_memory),prev = NULL;
+        curr != NULL;
+        curr = (__myfs_memory_block_t) __off_to_ptr(handle, (prev = curr)->next)){
+        if (prev == NULL && curr>block){
+            block->next= __ptr_to_off(handle,curr); //convert here
+            return;
+        }
+
+        if (curr>block && prev<block){
+            block->next = __ptr_to_off(handle,curr);
+            prev->next = __ptr_to_off(handle,block);
+            return;
+        }
+    }
+    if (curr == NULL && prev<block){
+        prev->next = __ptr_to_off(handle,block);
+        return;
+    }
+
+    return;
+    /* Want to insert block into list while maintaining overall order. */
+}
 
 
+__myfs_handle_t __myfs_get_handle(void *fsptr, size_t fssize){
+    __myfs_handle_t handle;
+    size_t s;
+    __myfs_inode_t *root = (__myfs_inode_t *) fsptr+sizeof(struct __myfs_handle_struct);
+
+    if(fssize < sizeof(__myfs_handle_t)) {
+        printf("NULL FROM HERE");
+        return NULL;
+    }
+
+    handle = (__myfs_handle_t) fsptr;
+    printf("handle error magic: %x\n",handle->magic);
+
+    //if(handle->magic != MYFS_MAGIC){
+    s = fssize - sizeof(__myfs_handle_t);
+    if(handle->magic != ((uint32_t)0)){
+        memset((fsptr + sizeof(__myfs_handle_t)), 0, s);
+    }
+    strcpy(root->name,"");
+    root->type = DIRECTORY;
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME,&ts);
+    root->times[0] = ts;
+    root->times[1] = ts;
+    root->value.directory.number_children = 0;
+    root->value.directory.children = (off_t) 0;
+
+
+    handle->root_dir = (off_t) __ptr_to_off(handle,root);
+
+
+    handle->magic = MYFS_MAGIC;
+    handle->size = s;
+    if(handle->size == ((size_t) 0)){
+        handle->free_memory = (off_t) 0;
+    }
+    //}
+    /*else{
+        printf("THIS NULL");
+        return NULL;
+    }*/
+    return handle;
+}
+
+
+
+__myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, char *path){
+    char *token;
+    int isFound=0;
+    __myfs_inode_t *curr;
+    if (path[0] != '/') return NULL;
+
+    __myfs_inode_t *root = (__myfs_inode_t *) __off_to_ptr(handle,handle->root_dir);
+
+    __myfs_inode_t *children = (__myfs_inode_t *) __off_to_ptr(handle,root->value.directory.children);
+
+    size_t number_children = root->value.directory.number_children;
+
+    if (strcmp("/",path)){
+        return root;
+    }
+    token = strtok(path, "/");
+
+    curr=root;
+    while(token != NULL)
+    {
+        isFound=0;
+        for (size_t j = (size_t) 0; j < number_children; j++) {
+            if(strcmp(children[j].name,token) == 0){
+                token = strtok(NULL, "/");
+                curr=children+j;
+                if(curr->type == DIRECTORY) {
+                    number_children = children[j].value.directory.number_children;
+                    children = __off_to_ptr(handle,children[j].value.directory.children);
+                }
+                else {
+                    token = strtok(NULL, "/");
+                    if(token != NULL){
+                        return NULL;
+                    }
+                }
+                isFound=1;
+                break;
+            }
+        }
+        if (isFound == 0){
+            return NULL;
+        }
+    }
+    return curr;
+}
 /* End of Memory Functions */
 
 /* Implements an emulation of the stat system call on the filesystem 
@@ -419,8 +543,54 @@ off_t __allocate_mem_block(__myfs_handle_t handle, size_t rawsize) {
 int __myfs_getattr_implem(void *fsptr, size_t fssize, int *errnoptr,
                           uid_t uid, gid_t gid,
                           const char *path, struct stat *stbuf) {
-  /* STUB */
-  return -1;
+    __myfs_handle_t handle;
+    __myfs_inode_t *node;
+    printf("FS PTR: %p\n",fsptr);
+    printf("PATH PTR: %s\n",path);
+    printf("PATH PTR: %li\n",fssize);
+
+    handle = __myfs_get_handle(fsptr, fssize);
+
+    if (handle == NULL){
+        *errnoptr = EFAULT;
+        printf("HANDLE IS NULL\n\n\n\n");
+        return -1;
+    }
+
+    __myfs_inode_t *root = (__myfs_inode_t *) __off_to_ptr(handle,handle->root_dir);
+    printf("root %s",root->name);
+
+
+
+    node = __myfs_path_resolve(handle,path);
+
+    if (node == NULL){
+        return -1;
+    }
+
+    stbuf->st_uid=uid;
+    stbuf->st_gid=gid;
+    if (node->type == DIRECTORY){
+        stbuf->st_mode = S_IFDIR | 0755;
+        __myfs_inode_t *children = (__myfs_inode_t *) __off_to_ptr(handle,node->value.directory.children);
+        int counter = 0;
+        for (size_t i = (size_t) 0; i < node->value.directory.number_children; i++){
+            if(children[i].type == DIRECTORY){
+                counter++;
+            }
+        }
+        stbuf->st_nlink = counter;
+        printf("COUNTER %i\n\n\n\n",counter);
+    }
+
+    else if (node->type == REGFILE){
+        stbuf->st_mode = S_IFREG | 0755;
+        stbuf->st_size = node->value.file.size;
+        stbuf->st_nlink = 1;
+    }
+    stbuf->st_atim = node->times[0];
+    stbuf->st_mtim = node->times[1];
+    return 0;
 }
 
 /* Implements an emulation of the readdir system call on the filesystem 
