@@ -236,6 +236,8 @@
 */
 
 /* Helper types and functions */
+
+typedef size_t off_t;
 //typedef enum reg_value;                 add enum for reg file and directory
 
 enum __myfs_inode_enum_type_t                /* as in the first example */
@@ -290,10 +292,6 @@ struct __myfs_inode_struct_t{
         __myfs_inode_directory_t directory;
     } value;
 }; typedef struct __myfs_inode_struct_t __myfs_inode_t;
-
-
-
-/* YOUR HELPER FUNCTIONS GO HERE */
 
 void *__off_to_ptr(__myfs_handle_t handle, off_t offset) {
     //if (offset == 0) return NULL;
@@ -396,30 +394,45 @@ void __free_mem_block(__myfs_handle_t handle, off_t block_offset) {
     curr = (__myfs_memory_block_t) __off_to_ptr(handle, handle->free_memory);
     block = (__myfs_memory_block_t) __off_to_ptr(handle, block_offset - sizeof(struct __myfs_memory_block_struct));
 
-    /* Fenceposting */
     for(curr = (__myfs_memory_block_t) __off_to_ptr(handle, handle->free_memory),prev = NULL;
         curr != NULL;
         curr = (__myfs_memory_block_t) __off_to_ptr(handle, (prev = curr)->next)){
         if (prev == NULL && curr>block){
-            block->next= __ptr_to_off(handle,curr); //convert here
+            block->next= __ptr_to_off(handle,curr);
+						__merge_blocks(handle);
             return;
         }
 
         if (curr>block && prev<block){
             block->next = __ptr_to_off(handle,curr);
             prev->next = __ptr_to_off(handle,block);
+						__merge_blocks(handle);
             return;
         }
     }
     if (curr == NULL && prev<block){
         prev->next = __ptr_to_off(handle,block);
+				__merge_blocks(handle);
         return;
     }
-
+		__merge_blocks(handle);
     return;
-    /* Want to insert block into list while maintaining overall order. */
 }
-
+void __merge_blocks(__myfs_handle_t handle) {
+	__myfs_memory_block_t next, curr, new;
+	curr = (__myfs_memory_block_t) __off_to_ptr(handle,handle->free_memory);
+	
+	while(curr->next != 0) {
+		/* Algorithm to combine cells */
+		while(curr->next != __ptr_to_off(handle, curr) + curr->size) { //Blocks are adjacent
+			next = (__myfs_memory_block_t) __off_to_ptr(handle, curr->next);
+			curr->size += next->size;
+			curr->next = next->next;
+		}
+		/* Increment to the next node */
+		curr = (__myfs_memory_block_t) __off_to_ptr(handle, curr->next);
+	}
+}
 
 
 __myfs_handle_t __myfs_get_handle(void *fsptr, size_t fssize){
