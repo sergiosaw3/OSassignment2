@@ -293,13 +293,13 @@ struct __myfs_inode_struct_t{
 void *__off_to_ptr(__myfs_handle_t handle, off_t offset) {
   if (offset == 0) return NULL;
   if (handle == NULL) return NULL;
-  return (void *)(handle + offset);
+  return (void *)(((void *)handle) + offset);
 }
 
 off_t __ptr_to_off(__myfs_handle_t handle, void *ptr) {
   if (ptr == NULL) return 0;
   
-  return (off_t) (handle - ptr);
+  return (off_t) (ptr - (void *)handle);
 }
 /* Memory housekeeping functions*/
 static int __try_size_t_multiply(size_t *c, size_t a, size_t b) {
