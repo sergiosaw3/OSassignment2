@@ -238,71 +238,68 @@
 /* Helper types and functions */
 
 typedef size_t off_t;
-//typedef enum reg_value;                 add enum for reg file and directory
 
-enum __myfs_inode_enum_type_t                /* as in the first example */
+typedef enum
 {
     DIRECTORY,
-    REGFILE
-};
-
-typedef enum __myfs_inode_enum_type_t __myfs_inode_type_t;
+    REG_FILE
+} __myfs_inode_type_t;
 
 struct __myfs_memory_block_struct{
-    size_t size;
-    size_t user_size;
-    off_t next;
+      size_t size;            /* Includes size of header */
+      size_t user_size;       
+      off_t next;             
 }; typedef struct __myfs_memory_block_struct *__myfs_memory_block_t;
 
 struct __myfs_handle_struct{
-    uint32_t magic;  //
-    size_t size;
-    off_t free_memory;
-    off_t root_dir;
+      uint32_t magic;
+      off_t free_memory; /* Points to the first block of memory*/
+      off_t root_dir;
+      size_t size;
 }; typedef struct __myfs_handle_struct *__myfs_handle_t;
 
-struct __myfs_inode_file_struct_t{
-    size_t size;
-    off_t first_block;
-}; typedef struct __myfs_inode_file_struct_t __myfs_inode_file_t;
-
 struct __myfs_file_block_struct_t{
-    size_t size;
-    size_t allocated;
-    off_t next;
-    off_t data;
+      size_t size;
+      size_t allocated;
+      off_t next;
+      off_t data;
 }; typedef struct __myfs_file_block_struct_t __myfs_file_block_t;
 
+struct __myfs_inode_file_struct_t{
+      size_t size;
+      off_t first_block;
+}; typedef struct __myfs_inode_file_struct_t __myfs_inode_file_t;
+
 struct __myfs_inode_directory_struct_t{
-    size_t number_children;
-    off_t children;
+      size_t number_children;
+      off_t children; /* Array of pointers */  /* First Child is ".", second is ".." */
 }; typedef struct __myfs_inode_directory_struct_t __myfs_inode_directory_t;
+
+struct __myfs_inode_struct_t{
+      __myfs_inode_type_t type;
+      char name[MYFS_MAXIMUM_NAME_LENGTH];
+      struct timespec times[2];
+      union{
+            __myfs_inode_file_t file;
+            __myfs_indoe_directory_t directory;
+      } value;
+}; typedef struct __myfs_inode_struct_t __myfs_inode_t;
 
 #define MYFS_MAXIMUM_NAME_LENGTH (255)
 #define MYFS_STATIC_PATH_BUF_SIZE (8192)
 #define MYFS_TRUNCATE_SMALL_ALLOCATE ((size_t) 512)
 #define MYFS_MAGIC (0xCAFEBABE)
 
-struct __myfs_inode_struct_t{
-    __myfs_inode_type_t type;
-    char name[MYFS_MAXIMUM_NAME_LENGTH];
-    struct timespec times[2];
-    union{
-        __myfs_inode_file_t file;
-        __myfs_inode_directory_t directory;
-    } value;
-}; typedef struct __myfs_inode_struct_t __myfs_inode_t;
-
 void *__off_to_ptr(__myfs_handle_t handle, off_t offset) {
-    //if (offset == 0) return NULL;
-    if (handle == NULL) return NULL;
-    return (void *)(((void *)handle) + offset);
+  if (offset == 0) return NULL;
+  if (handle == NULL) return NULL;
+  return (void *)(handle + offset);
 }
 
 off_t __ptr_to_off(__myfs_handle_t handle, void *ptr) {
-    if (ptr == NULL) return 0;
-
-    return (off_t) (ptr - (void *)handle);
+  if (ptr == NULL) return 0;
+  
+  return (off_t) (handle - ptr);
 }
 /* Memory housekeeping functions*/
 static int __try_size_t_multiply(size_t *c, size_t a, size_t b) {
@@ -355,7 +352,7 @@ off_t __allocate_mem_block(__myfs_handle_t handle, size_t rawsize) {
 
     nmemb /= sizeof(struct __myfs_memory_block_struct);
     if(!__try_size_t_multiply(&size, nmemb, sizeof(struct __myfs_memory_block_struct))) return 0;
-    /* 	*/
+    /* Iterate through free blocks until it reaches the end of the map.	*/
     for(curr = (__myfs_memory_block_t) __off_to_ptr(handle, handle->free_memory), prev = NULL;
         curr != NULL;
         curr = (__myfs_memory_block_t) __off_to_ptr(handle, (prev = curr)->next)) {
@@ -434,97 +431,206 @@ void __merge_blocks(__myfs_handle_t handle) {
 	}
 }
 
-
-__myfs_handle_t __myfs_get_handle(void *fsptr, size_t fssize){
-    __myfs_handle_t handle;
-    size_t s;
-    __myfs_inode_t *root = (__myfs_inode_t *) fsptr+sizeof(struct __myfs_handle_struct);
-
-    if(fssize < sizeof(__myfs_handle_t)) {
-        printf("NULL FROM HERE");
-        return NULL;
-    }
-
-    handle = (__myfs_handle_t) fsptr;
-    printf("handle error magic: %x\n",handle->magic);
-
-    //if(handle->magic != MYFS_MAGIC){
-        s = fssize - sizeof(__myfs_handle_t);
-        if(handle->magic != ((uint32_t)0)){
-            memset((fsptr + sizeof(__myfs_handle_t)), 0, s);
-        }
-        strcpy(root->name,"");
-        root->type = DIRECTORY;
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME,&ts);
-        root->times[0] = ts;
-        root->times[1] = ts;
-        root->value.directory.number_children = 0;
-        root->value.directory.children = (off_t) 0;
+void __set_curr_time(__myfs_inode_t *node, int set_mod) {
+	struct timespec ts;
+	if(node == NULL) return;
+	if(clock_gettime(CLOCK_REALTIME, &ts) == 0) {
+		node->times[0] = ts;
+		if(set_mod) {
+			node->times[1] = ts;
+		}
+	}
+}
 
 
-        handle->root_dir = (off_t) __ptr_to_off(handle,root);
-
-
-        handle->magic = MYFS_MAGIC;
-        handle->size = s;
-        if(handle->size == ((size_t) 0)){
-            handle->free_memory = (off_t) 0;
-        }
-    //}
-    /*else{
-        printf("THIS NULL");
-        return NULL;
-    }*/
-    return handle;
+__myfs_handle_t __myfs_get_handle(void *fsptr, size_t fssize) {
+	__myfs_handle_t handle;
+	
+	handle = (__myfs_handle_t) fsptr;
+	// Check if magic is correct and if so, then return the handle
+	if(handle->magic == MYFS_MAGIC) return handle; 
+	
+	//If we're here, the file system needs to be initialized.
+	
+	/* Do variable declarations here, so we aren't doing declarations at the top
+	when they won't be necessary in the majority of cases. */
+	__myfs_inode_t *root;
+	size_t mem_size;
+	__myfs_memory_block_t first_block;
+	off_t *root_children;
+	
+	/* Need to track size of all available memory for the purpose of 
+		 properly setting up the block system. */
+	mem_size = fssize;
+	handle->size = fssize;
+	//Exclude the handle:
+	mem_size -= sizeof(struct __myfs_handle_struct);
+	
+	
+	/* Set up root directory.
+		 Root dir will be set in stone as right after the handle */
+	root = (__myfs_inode_t *)(fsptr + sizeof(struct __myfs_handle_struct));
+	//Set type
+	root->type = DIRECTORY;
+	//Set name
+	strcpy((char *) &root->name, "root");
+	//Setup Timespec
+	__set_curr_time(root, 1);
+	//Set up directory stats a bit.
+	root->value.directory.number_children=2;
+	
+	
+	//Mark this memory as taken
+	mem_size -= sizeof(__myfs_inode_t);
+	
+	//Set the root directory in the handle
+	handle->root_dir = __ptr_to_off(handle, root);
+	
+	/* Set up the allocateable memory blocks. */
+	//Set first_block to be after the handle and the root directory.
+	first_block = (__myfs_memory_block_t) (fsptr + sizeof(struct __myfs_handle_struct) + sizeof(__myfs_inode_t));
+	first_block->next = 0;
+	first_block->size = mem_size;
+	first_block->user_size = mem_size - sizeof(struct __myfs_handle_struct);
+	
+	//Set the free_memory in the handle
+	handle->free_memory = __ptr_to_off(handle, first_block);
+	//Finished with memory initialization
+	
+	//Allocate memory for the children array in the root.
+	root->value.directory.children = __allocate_mem_block(handle, 2* sizeof(off_t));
+	root_children = __off_to_ptr(handle, root->value.directory.children);
+	//Set the . subdirectory to be a self reference.
+	root_children[0] = __ptr_to_off(handle, root);
+	//Since it is the root, should have no ..
+	root_children[1] = (off_t) 0;
+	
+	//Set handle's magic last in case something goes wrong during initialization
+	handle->magic = MYFS_MAGIC;
+	return handle;
 }
 
 
 
 __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, char *path){
-    char *token;
-    int isFound=0;
-    __myfs_inode_t *curr;
-    if (path[0] != '/') return NULL;
+	char *token;
+	int isFound=0;
+	__myfs_inode_t *curr;
+	if (path[0] != '/') return NULL;
 
-    __myfs_inode_t *root = (__myfs_inode_t *) __off_to_ptr(handle,handle->root_dir);
+	__myfs_inode_t *root = (__myfs_inode_t *) __off_to_ptr(handle,handle->root_dir);
 
-    __myfs_inode_t *children = (__myfs_inode_t *) __off_to_ptr(handle,root->value.directory.children);
+	off_t *children = (off_t *) __off_to_ptr(handle,root->value.directory.children);
 
-    size_t number_children = root->value.directory.number_children;
+	size_t number_children = root->value.directory.number_children;
 
-    if (strcmp("/",path)){
-        return root;
-    }
-    token = strtok(path, "/");
+	if (!strcmp("/",path)){
+		return root;
+	}
+	token = strtok(path, "/");
 
-    curr=root;
-    while(token != NULL)
-    {
-        isFound=0;
-        for (size_t j = (size_t) 0; j < number_children; j++) {
-            if(strcmp(children[j].name,token) == 0){
-                token = strtok(NULL, "/");
-                curr=children+j;
-                if(curr->type == DIRECTORY) {
-                    number_children = children[j].value.directory.number_children;
-                    children = __off_to_ptr(handle,children[j].value.directory.children);
-                }
-                else {
-                    token = strtok(NULL, "/");
-                    if(token != NULL){
-                        return NULL;
-                    }
-                }
-                isFound=1;
-                break;
-            }
-        }
-        if (isFound == 0){
-            return NULL;
-        }
-    }
-    return curr;
+	curr=root;
+	while(token != NULL)
+	{
+		//Shortcut to avoid leaving filesystem
+		//Check if we are trying to go up from the root.
+		//Return NULL in the off chance that that happens.
+		if(curr == root && strcmp("..",token) == 0) return NULL;
+		
+		//Reset found condition
+		isFound=0;
+		
+		//Special case: .
+		//Index 0 in children array
+		//Burn the . token and restart the big loop.
+		//No need to change curr or array bounds.
+		if(strcmp(".",token) == 0) {
+			isFound = 1;
+			token = strtok(NULL, "/");
+			continue;
+		}
+		
+		//Special case: ..
+		//Index 1 in children array
+		/* 
+			I need to move up and 
+			reset the bounds of iteration
+		*/
+		if(strcmp("..",token) == 0) {
+			isFound = 1;
+			
+			//Move curr
+			curr = (__myfs_inode_t *) __off_to_ptr(handle, children[1]);
+			//Get the next number_children
+			number_children = curr->value.directory.number_children;
+			//Get the next children array
+			children = (off_t *) __off_to_ptr(handle,curr->value.directory.children);
+			//Burn token
+			token = strtok(NULL, "/");
+			
+			continue;
+		}
+		
+		/* j iterates throught the children array.
+			 Starts at 2 to skip the relative entries  
+		*/
+		for (size_t j = (size_t) 2; j < number_children; j++) {
+			/* 
+				This conditional is a doozy
+				Access the children array at index j. 
+				children[j] -> (off_t)
+				
+				Converts that offset to a pointer using __off_to_ptr 
+				(off_t) -> (void *)
+				
+				Casts that to an inode pointer
+				(void *) -> (__myfs_inode_t *)
+				
+				Accesses the name field of the struct at that pointer.
+				
+				Uses strcmp to compare to the string, token and checks if they are equal using the == 0.
+				
+				If they are a match, then it executes the code in the if statement.
+				Else, continue to the next value of j.
+			*/
+			if(strcmp( ((__myfs_inode_t *) __off_to_ptr(handle, children[j]))->name,token) == 0){
+				/* 
+					If inside here, found the correct part of the path, prepare to continue the search
+				*/
+				
+				//Get next token
+				token = strtok(NULL, "/");
+				//Move curr down to the child of interest
+				curr= (__myfs_inode_t *) __off_to_ptr(handle, children[j]);
+				//Check if curr is a directory
+				if(curr->type == DIRECTORY) {
+					//If so prepare array to loop over and bounds of looping
+					//Get the next number_children
+					number_children = curr->value.directory.number_children;
+					//Get the next children array
+					children = (off_t *) __off_to_ptr(handle,curr->value.directory.children);
+				}
+				//Else, curr is a file
+				else {
+					//Get next token to check if curr is the last
+					//If curr is the last part of the path, then token will be NULL
+					token = strtok(NULL, "/");
+					//If it isn't NULL, then there is still more to path and curr shouldn't be searched as a dir.
+					if(token != NULL){
+						return NULL;
+					}
+				}
+				//If the next part is found, then leave the for loop and set found condition to 1.
+				isFound=1;
+				break;
+			}
+		}
+		//Check found condition
+		if (isFound == 0){
+				return NULL;
+		}
+	}
+	return curr;
 }
 /* End of helper functions */
 
