@@ -388,6 +388,11 @@ Takes the handle and offset of the beginning of the data of a memory block
         The data comes right after the header.
 */
 void __free_mem_block(__myfs_handle_t handle, off_t block_offset) {
+		if(block_offset == 0) {
+			__merge_blocks(handle);
+			return;
+		}
+		
     __myfs_memory_block_t prev, curr, block;
     prev = NULL;
     curr = (__myfs_memory_block_t) __off_to_ptr(handle, handle->free_memory);
@@ -931,6 +936,16 @@ char * __remove_end_of_path(const char *path) {
     return path_to_ret;
 }
 
+/* Gets the parent of the node at path */
+__myfs_inode_t *__get_parent(__myfs_handle_t handle, const char *path, int *errnoptr) {
+	/* Declare variables */
+	char *parent_path = __remove_end_of_path(path);
+	__myfs_inode_t *parentNode;
+	parentNode = __myfs_path_resolve(handle,parent_path,errnoptr);
+  free(parent_path);
+	return parentNode;
+}
+
 char *__get_name(const char *path){
     //Vars
     size_t path_length;
@@ -1312,8 +1327,67 @@ int __myfs_unlink_implem(void *fsptr, size_t fssize, int *errnoptr,
 */
 int __myfs_rmdir_implem(void *fsptr, size_t fssize, int *errnoptr,
                         const char *path) {
-    /* STUB */
-    return -1;
+    /* Declare variables */
+		__myfs_handle_t handle;
+		__myfs_inode_t *dir_node;
+		__myfs_inode_t *parent_dir;
+		off_t *parent_contents; //Used for convenient looping
+		off_t dir_off_set; //Used to free the directory's memory
+		int i;
+		
+		if(strlen(path) > MYFS_STATIC_PATH_BUF_SIZE) {
+			*errnoptr = ENAMETOOLONG;
+			return -1;
+		}
+		
+		
+		/* Get handle */
+		handle = __myfs_get_handle(fsptr, fssize);
+		
+		//Get parent dir
+		parent_dir = __get_parent(handle, path, errnoptr);
+		if(parent_dir == NULL) {
+			return -1;
+		}
+		parent_contents = (off_t *) __off_to_ptr(handle, parentNode->value.directory.children);
+		
+		//Get directory to remove
+		dir_node = __myfs_path_resolve(handle, path, errnoptr);
+		if(dir_node == NULL) {
+			return -1;
+		}
+		dir_off_set = __ptr_to_off(handle, dir_node);
+		
+		
+		if(dir_node->value.directory.number_children != 2) {
+			*errnoptr = ENOTEMPTY;
+			return -1;
+		}
+		
+		//Free memory that the child array occupies
+		__free_mem_block(handle, dir_node->value.directory.children);
+		
+		//Remove directory from parent's array
+		for(i = 0; i < parentNode->value.directory.number_children; i++) {
+			if (parent_contents[i] == dir_off_set) {
+				parent_contents[i] = ((off_t)0);
+				break;
+			}
+		}
+		//Shifts back parent array so there are no gaps
+		i++;
+		while(i < parentNode->value.directory.number_children) {
+			parent_contents[i-1] = parent_contents[i];
+			i++;
+		}
+		//Decrements number of parent's children
+		parentNode->value.directory.number_children--;
+		
+		//Free memory taken by directory's inode
+		__free_mem_block(handle, dir_off_set);
+		
+		
+    return 0;
 }
 
 /* Implements an emulation of the mkdir system call on the filesystem
@@ -1467,7 +1541,10 @@ int __myfs_write_implem(void *fsptr, size_t fssize, int *errnoptr,
 */
 int __myfs_utimens_implem(void *fsptr, size_t fssize, int *errnoptr,
                           const char *path, const struct timespec ts[2]) {
-    /* STUB */
+    /* Declare variables */
+		__myfs_handle_t handle;
+		__myfs_inode_t file_to_update;
+		
     return -1;
 }
 
