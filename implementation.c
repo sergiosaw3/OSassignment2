@@ -516,6 +516,9 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, char *path){
 	char *token;
 	int isFound=0;
 	__myfs_inode_t *curr;
+	size_t pathlen;
+	char *path_cpy;
+	
 	if (path[0] != '/') return NULL;
 
 	__myfs_inode_t *root = (__myfs_inode_t *) __off_to_ptr(handle,handle->root_dir);
@@ -527,7 +530,13 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, char *path){
 	if (!strcmp("/",path)){
 		return root;
 	}
-	token = strtok(path, "/");
+	//Get length of path string to be passed to malloc
+	//Add 1 to reinclude the null terminator
+	pathlen = strlen(path) + (size_t)1;
+	path_cpy = malloc(pathlen * sizeof(char));
+	strcpy(path_cpy,path);
+	
+	token = strtok(path_cpy, "/");
 
 	curr=root;
 	while(token != NULL)
@@ -535,8 +544,10 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, char *path){
 		//Shortcut to avoid leaving filesystem
 		//Check if we are trying to go up from the root.
 		//Return NULL in the off chance that that happens.
-		if(curr == root && strcmp("..",token) == 0) return NULL;
-		
+		if(curr == root && strcmp("..",token) == 0) {
+			free(path_cpy);
+			return NULL;
+		}
 		//Reset found condition
 		isFound=0;
 		
@@ -617,6 +628,7 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, char *path){
 					token = strtok(NULL, "/");
 					//If it isn't NULL, then there is still more to path and curr shouldn't be searched as a dir.
 					if(token != NULL){
+						free(path_cpy);
 						return NULL;
 					}
 				}
@@ -627,9 +639,11 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, char *path){
 		}
 		//Check found condition
 		if (isFound == 0){
-				return NULL;
+			free(path_cpy);
+			return NULL;
 		}
 	}
+	free(path_cpy);
 	return curr;
 }
 /* End of helper functions */
@@ -662,7 +676,7 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, char *path){
 */
 int __myfs_getattr_implem(void *fsptr, size_t fssize, int *errnoptr,
                           uid_t uid, gid_t gid,
-                           char *path, struct stat *stbuf) {
+                          const char *path, struct stat *stbuf) {
     __myfs_handle_t handle;
     __myfs_inode_t *node;
     printf("FS PTR: %p\n",fsptr);
