@@ -638,7 +638,7 @@ off_t __reallocate_mem_block(__myfs_handle_t handle, off_t ptr, size_t new_size,
         memcpy(__off_to_ptr(handle,new_data), __off_to_ptr(handle, ptr), new_dat_size);
     }
 
-
+		__free_mem_block(handle, ptr);
 
     *errnoptr = 0;
     return new_data;
