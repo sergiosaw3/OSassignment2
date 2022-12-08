@@ -1116,13 +1116,11 @@ int __myfs_readdir_implem(void *fsptr, size_t fssize, int *errnoptr,
     /* Check if ptr is null, if so return -1 and set errno.
         If it is null, path is not a valid path. */
     if(dir_to_read == NULL) {
-        *errnoptr = ENOENT;
         return -1;
     }
     /* Check if node is a file and not a directory
          If it is, set errno and return -1 */
     if(dir_to_read->type == REG_FILE) {
-        *errnoptr = ENOTDIR;
         return -1;
     }
 
