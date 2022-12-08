@@ -1306,8 +1306,84 @@ int __myfs_mknod_implem(void *fsptr, size_t fssize, int *errnoptr,
 */
 int __myfs_unlink_implem(void *fsptr, size_t fssize, int *errnoptr,
                          const char *path) {
-    /* STUB */
-    return -1;
+	/* Declare variables */
+	__myfs_file_block_t *curr_fblock, *prev_fblock; //Will be used to iterate accross the file and free the file blocks
+	__myfs_inode_t *parent_dir; //Parent directory
+	__myfs_inode_t *f_to_unlink; //File to be unlinked located at path.
+	__myfs_handle_t handle; //Handle of the file system
+	off_t *parent_contents; //Used for convenient looping
+	off_t file_off_set; //Used to free the directory's memory
+	
+	/* Check the length of the path string */
+	if(strlen(path) > MYFS_STATIC_PATH_BUF_SIZE) {
+		*errnoptr = ENAMETOOLONG;
+		return -1;
+	}
+	
+	handle = __myfs_get_handle(fsptr, fssize);
+		
+	/* Get parent dir */
+	parent_dir = __get_parent(handle, path, errnoptr);
+	
+	/* Check for error in getting ptr */
+	if(parent_dir == NULL) {
+		return -1;
+	}
+	parent_contents = (off_t *) __off_to_ptr(handle, parent_dir->value.directory.children);
+	
+	/* Get the relevant file */
+	f_to_unlink = __get_parent(handle, path, errnoptr);
+	
+	/* Check for errors in getting file ptr */
+	if(f_to_unlink == NULL) {
+		return -1;
+	}
+	
+	/* Set iterator pointers for the file block systems */
+	prev_fblock = NULL;
+	curr_fblock = (__myfs_file_block_t *) __off_to_ptr(handle, f_to_unlink->value.file.first_block);
+	
+	/* This loop iterates through the block linked list frees each one and the associated data. */
+	while(curr_fblock != NULL) {
+		//Free the file block's data
+		if(curr_fblock-> data != 0) {
+			__free_mem_block(handle, curr_fblock->data);
+		}
+		//Free the previous block if it is not NULL
+		if(prev_fblock != NULL) {
+			__free_mem_block(handle, __ptr_to_off(handle, prev_fblock));
+		}
+		
+		//Increment prev_fblock
+		prev_fblock = curr_fblock;
+		
+		//Increment curr_fblock
+		curr_fblock = __off_to_ptr(handle, curr_fblock->next);
+	}
+	// When curr falls out of the loop, the last node will not have been freed
+	__free_mem_block(handle, prev_fblock);
+	
+	//Free the file inode from memory.
+	__free_mem_block(handle, file_off_set);
+	
+	//Remove file from parent's array
+	for(i = 0; i < parent_dir->value.directory.number_children; i++) {
+		if (parent_contents[i] == file_off_set) {
+			parent_contents[i] = ((off_t)0);
+			break;
+		}
+	}
+	//Shifts back parent array so there are no gaps
+	i++;
+	while(i < parent_dir->value.directory.number_children) {
+		parent_contents[i-1] = parent_contents[i];
+		i++;
+	}
+
+	//Decrement the number of children in the parent directory
+	parent_dir->value.directory.number_children--;
+
+	return 0;
 }
 
 /* Implements an emulation of the rmdir system call on the filesystem
