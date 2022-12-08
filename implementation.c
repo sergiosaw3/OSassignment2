@@ -765,9 +765,100 @@ int __myfs_getattr_implem(void *fsptr, size_t fssize, int *errnoptr,
 */
 int __myfs_readdir_implem(void *fsptr, size_t fssize, int *errnoptr,
                           const char *path, char ***namesptr) {
-  /* STUB */
-
-  return -1;
+	/* Variable declarations */
+	__myfs_handle_t handle; //File system handle
+	__myfs_inode_t *dir_to_read; //Directory at path
+	int number_to_report; //Number to return
+	int alloc_fail = 0; //Set to one if a malloc fails
+	char **name_list; //List of names to be inserted into *namesptr
+	int num_successfully_allocated = 0;  //Used to track how many strings have been successfully allocated for deallocating 
+	int iter; //Number used to iterate through the children.
+	off_t *children_array; //Array of the offsets of the children
+	__myfs_inode_t *curr_child; // Used for convenient access to the child node being accessed
+	size_t namelen; //Used as a convenient way to access the length of the string to be allocated.
+	
+	/* First get handle or initialize filesystem */
+	handle = __myfs_get_handle(fsptr, fssize);
+	
+	/* Get the directory node from path */
+	dir_to_read = __myfs_path_resolve(handle, path);
+	
+	/* Check if ptr is null, if so return -1 and set errno.
+		If it is null, path is not a valid path. */
+	if(dir_to_read == NULL) {
+		*errnoptr = ENOENT;
+		return -1;
+	}
+	/* Check if node is a file and not a directory 
+		 If it is, set errno and return -1 */
+	if(dir_to_read->type == REG_FILE) {
+		*errnoptr = ENOTDIR;
+		return -1;
+	}
+	
+	/* Edge case: empty directory.  If this is the case, then dir_to_read ->value.directory.number_chlidern == 2.
+		 If this is the case, then simply return 0 without iteration.*/
+	if(dir_to_read->value.directory.number_chlidern == 2) {
+		return 0;
+	}
+	
+	/* Regular operation */
+	//Set number that should be reported assuming allocation goes properly.
+	//Should be two less than the number of children because . and .. are chlidren that should not be counted by readdir.
+	number_to_report = dir_to_read->value.directory.number_chlidern - 2;
+	
+	//Allocate name_list
+	name_list = (char **) calloc(number_to_report, sizeof(char *));
+	
+	//Error check if calloc failed
+	if(name_list == NULL) {
+		*errnoptr = EINVAL;
+		return -1;
+	}
+	
+	//Set children_array
+	children_array = (off_t *) __off_to_ptr(handle, dir_to_read->value.directory.children);
+	
+	for(iter = 0; iter < number_to_report; iter++;) {
+		//Get child at iter + 2
+		curr_child = __off_to_ptr(handle, children_array[iter+2]);
+		//Get size to allocate
+		//Get length of string using strlen and add 1 for the null termination
+		namelen = strlen(curr_child->name)+1;
+		//Allocate memory for the name
+		name_list[iter] = (char *) malloc(name_len * sizeof(char));
+		
+		//Check to see if the malloc succeeded or failed
+		if(name_list[iter] == NULL) {
+			alloc_fail = 1;
+			break;
+		}
+		// Else increment num_successfully_allocated
+		num_successfully_allocated++;
+		//Copy name into name_list
+		//strcpy includes the null termination
+		strcpy(name_list[iter], curr_child->name);
+	}
+	
+	//Check if malloc failed
+	if(alloc_fail) {
+		//Deallocate everything if malloc failed
+		
+		//Reuse iter here for convenience
+		//Iterate to num_successfully_allocated to only free the strings that were allocated
+		for(iter = 0; iter < num_successfully_allocated; iter++) {
+			free(name_list[iter]);
+		}
+		//Deallocate name_list after all members have been deallocated
+		free(name_list);
+		//Set errno
+		*errnoptr = EINVAL;
+		return -1;
+	}
+	
+	//If all goes right, set *namesptr to the filled name_list
+	*namesptr = name_list;
+  return number_to_report;
 }
 
 /* Implements an emulation of the mknod system call for regular files
