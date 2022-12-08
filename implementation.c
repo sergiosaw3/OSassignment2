@@ -1311,7 +1311,7 @@ int __myfs_unlink_implem(void *fsptr, size_t fssize, int *errnoptr,
 	__myfs_handle_t handle; //Handle of the file system
 	off_t *parent_contents; //Used for convenient looping
 	off_t file_off_set; //Used to free the directory's memory
-	
+	size_t i;
 	/* Check the length of the path string */
 	if(strlen(path) > MYFS_STATIC_PATH_BUF_SIZE) {
 		*errnoptr = ENAMETOOLONG;
@@ -1424,7 +1424,7 @@ int __myfs_rmdir_implem(void *fsptr, size_t fssize, int *errnoptr,
 		if(parent_dir == NULL) {
 			return -1;
 		}
-		parent_contents = (off_t *) __off_to_ptr(handle, parentNode->value.directory.children);
+		parent_contents = (off_t *) __off_to_ptr(handle, parent_dir->value.directory.children);
 		
 		//Get directory to remove
 		dir_node = __myfs_path_resolve(handle, path, errnoptr);
@@ -1443,7 +1443,7 @@ int __myfs_rmdir_implem(void *fsptr, size_t fssize, int *errnoptr,
 		__free_mem_block(handle, dir_node->value.directory.children);
 		
 		//Remove directory from parent's array
-		for(i = 0; i < parentNode->value.directory.number_children; i++) {
+		for(i = 0; i < parent_dir->value.directory.number_children; i++) {
 			if (parent_contents[i] == dir_off_set) {
 				parent_contents[i] = ((off_t)0);
 				break;
@@ -1451,12 +1451,12 @@ int __myfs_rmdir_implem(void *fsptr, size_t fssize, int *errnoptr,
 		}
 		//Shifts back parent array so there are no gaps
 		i++;
-		while(i < parentNode->value.directory.number_children) {
+		while(i < parent_dir->value.directory.number_children) {
 			parent_contents[i-1] = parent_contents[i];
 			i++;
 		}
 		//Decrements number of parent's children
-		parentNode->value.directory.number_children--;
+        parent_dir->value.directory.number_children--;
 		
 		//Free memory taken by directory's inode
 		__free_mem_block(handle, dir_off_set);
@@ -1479,8 +1479,91 @@ int __myfs_rmdir_implem(void *fsptr, size_t fssize, int *errnoptr,
 */
 int __myfs_mkdir_implem(void *fsptr, size_t fssize, int *errnoptr,
                         const char *path) {
-    /* STUB */
-    return -1;
+    *errnoptr = 0;
+    __myfs_handle_t handle;
+    __myfs_inode_t *parentNode; //Directory at path
+    __myfs_inode_t *childNode;
+    __myfs_file_block_t *fblock;
+    off_t *children;
+    off_t *child_children;
+    off_t  allocate_inode;
+    off_t allocate_fblock;
+    int allocation_error = 0;
+    int allocated_children;
+    char *child_name = __get_name(path);
+    char *parent_path = __remove_end_of_path(path); //parent path
+    handle = __myfs_get_handle(fsptr, fssize);
+
+    if(strlen(child_name)+1 > MYFS_MAXIMUM_NAME_LENGTH){
+        *errnoptr = ENAMETOOLONG; //If Name is too long send correct error
+        free(child_name);
+        free(parent_path);
+        return -1;
+    }
+
+    parentNode = __myfs_path_resolve(handle,parent_path,errnoptr);
+    free(parent_path);
+    //Error handling in path resolve...
+    if (parentNode == NULL){
+        free(child_name);
+        return -1;
+    }
+
+    allocated_children = parentNode->value.directory.allocated_children;
+
+    if(parentNode->value.directory.number_children+1 > allocated_children){
+        parentNode->value.directory.children=
+                __reallocate_mem_block(handle, parentNode->value.directory.children, allocated_children * 2 * sizeof(off_t *), &allocation_error);
+
+        if(allocation_error < 0){
+            free(child_name);
+            *errnoptr = ENOSPC;
+            return -1;
+        }
+
+        parentNode->value.directory.allocated_children*=2;
+    }
+
+    children = __off_to_ptr(handle, parentNode->value.directory.children);
+    //allocate mem for child node
+    allocate_inode = __allocate_mem_block(handle,sizeof(__myfs_inode_t));
+
+    if (allocate_inode == (off_t)0){
+        free(child_name);
+        *errnoptr=ENOSPC;
+        return -1;
+    }
+
+    allocate_fblock = __allocate_mem_block(handle, 2* sizeof(off_t));
+    if (allocate_fblock == (off_t)0){
+        free(child_name);
+        *errnoptr=ENOSPC;
+        return -1;
+    }
+
+    //Create Child Node
+    childNode = (__myfs_inode_t *) __off_to_ptr(handle,allocate_inode);
+    //Set Type
+    childNode->type = DIRECTORY;
+    //Set Name
+    strcpy((char *)&(childNode->name),child_name);
+    //Free prev name
+    free(child_name);
+    //Set curr time
+    __set_curr_time(childNode,1);
+    //Set up directory stats a bit.
+    childNode->value.directory.number_children=2;
+    //Set up allocated Children
+    childNode->value.directory.allocated_children=2;
+    childNode->value.directory.children = allocate_fblock;
+    child_children = __off_to_ptr(handle,childNode->value.directory.children);
+    child_children[0] = __ptr_to_off(handle,childNode);
+    child_children[1] = __ptr_to_off(handle,parentNode);
+
+    children[parentNode->value.directory.number_children] = allocate_inode;
+    //Increase amount of children :D
+    parentNode->value.directory.number_children++;
+    return 0;
 }
 
 /* Implements an emulation of the rename system call on the filesystem
