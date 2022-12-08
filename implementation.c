@@ -691,7 +691,7 @@ char * __remove_end_of_path(const char *path) {
 	//Iterate backwards through the string until a / is encountered
 	//Additionally, set all characters between the end of the path and the last '/' to '\0'
 	//path is guaranteed to at least start with '/'
-	for(iter = path_length; modifiable_path[iter] != '/'; iter --;){
+	for(iter = path_length; modifiable_path[iter] != '/'; iter --){
 		modifiable_path[iter] = '\0';
 	}
 	
