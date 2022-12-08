@@ -1330,12 +1330,13 @@ int __myfs_unlink_implem(void *fsptr, size_t fssize, int *errnoptr,
 	parent_contents = (off_t *) __off_to_ptr(handle, parent_dir->value.directory.children);
 	
 	/* Get the relevant file */
-	f_to_unlink = __get_parent(handle, path, errnoptr);
+	f_to_unlink = __myfs_path_resolve(handle, path, errnoptr);
 	
 	/* Check for errors in getting file ptr */
 	if(f_to_unlink == NULL) {
 		return -1;
 	}
+	file_off_set = __ptr_to_off(handle, f_to_unlink);
 	
 	/* Set iterator pointers for the file block systems */
 	prev_fblock = NULL;
@@ -1359,7 +1360,7 @@ int __myfs_unlink_implem(void *fsptr, size_t fssize, int *errnoptr,
 		curr_fblock = __off_to_ptr(handle, curr_fblock->next);
 	}
 	// When curr falls out of the loop, the last node will not have been freed
-	__free_mem_block(handle, prev_fblock);
+	__free_mem_block(handle, __ptr_to_off(handle, prev_fblock));
 	
 	//Free the file inode from memory.
 	__free_mem_block(handle, file_off_set);
