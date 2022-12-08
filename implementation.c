@@ -347,7 +347,7 @@ off_t __allocate_mem_block(__myfs_handle_t handle, size_t rawsize) {
 
     if (rawsize == ((size_t) 0)) return 0;
 
-    size = rawsize-((size_t)1);
+    size = rawsize-((size_t)1)+sizeof(struct __myfs_memory_block_struct);
     nmemb = size + sizeof(struct __myfs_memory_block_struct);
     if (nmemb < size) return 0;
 
@@ -761,7 +761,7 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, const char *path,in
         //Return NULL in the off chance that that happens.
         if(curr == root && strcmp("..",token) == 0) {
             free(path_cpy);
-            //*errnoptr = EACCES;
+            *errnoptr = EACCES;
             return NULL;
         }
         //Reset found condition
@@ -845,7 +845,7 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, const char *path,in
                     //If it isn't NULL, then there is still more to path and curr shouldn't be searched as a dir.
                     if(token != NULL){
                         free(path_cpy);
-                        //*errnoptr = ENOTDIR;
+                        *errnoptr = ENOTDIR;
                         return NULL;
                     }
                 }
@@ -857,7 +857,7 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, const char *path,in
         //Check found condition
         if (isFound == 0){
             free(path_cpy);
-            //*errnoptr = ENOENT;
+            *errnoptr = ENOENT;
             return NULL;
         }
     }
@@ -1002,21 +1002,14 @@ int __myfs_getattr_implem(void *fsptr, size_t fssize, int *errnoptr,
                           const char *path, struct stat *stbuf) {
     __myfs_handle_t handle;
     __myfs_inode_t *node;
-    printf("FS PTR: %p\n",fsptr);
-    printf("PATH PTR: %s\n",path);
-    printf("PATH PTR: %li\n",fssize);
+
 
     handle = __myfs_get_handle(fsptr, fssize);
 
     if (handle == NULL){
         *errnoptr = EFAULT;
-        printf("HANDLE IS NULL\n\n\n\n");
         return -1;
     }
-
-    __myfs_inode_t *root = (__myfs_inode_t *) __off_to_ptr(handle,handle->root_dir);
-    printf("root %s",root->name);
-
 
 
     node = __myfs_path_resolve(handle,path,errnoptr);
@@ -1037,7 +1030,6 @@ int __myfs_getattr_implem(void *fsptr, size_t fssize, int *errnoptr,
             }
         }
         stbuf->st_nlink = counter;
-        printf("COUNTER %i\n\n\n\n",counter);
     }
 
     else if (node->type == REG_FILE){
@@ -1204,6 +1196,7 @@ int __myfs_readdir_implem(void *fsptr, size_t fssize, int *errnoptr,
 int __myfs_mknod_implem(void *fsptr, size_t fssize, int *errnoptr,
                         const char *path) {
     /* STUB */
+    *errnoptr = 0;
     __myfs_handle_t handle;
     __myfs_inode_t *parentNode; //Directory at path
     __myfs_inode_t *childNode;
@@ -1215,7 +1208,6 @@ int __myfs_mknod_implem(void *fsptr, size_t fssize, int *errnoptr,
     int allocated_children;
     char *child_name = __get_name(path);
     char *parent_path = __remove_end_of_path(path); //parent path
-
     handle = __myfs_get_handle(fsptr, fssize);
 
     if(strlen(child_name)+1 > MYFS_MAXIMUM_NAME_LENGTH){
@@ -1242,7 +1234,6 @@ int __myfs_mknod_implem(void *fsptr, size_t fssize, int *errnoptr,
         if(allocation_error < 0){
             free(child_name);
             *errnoptr = ENOSPC;
-            printf("enospc1\n\n\n\n\n\n\n");
             return -1;
         }
 
@@ -1256,7 +1247,6 @@ int __myfs_mknod_implem(void *fsptr, size_t fssize, int *errnoptr,
     if (allocate_inode == (off_t)0){
         free(child_name);
         *errnoptr=ENOSPC;
-        printf("enospc2\n\n\n\n\n\n\n");
         return -1;
     }
 
@@ -1264,7 +1254,6 @@ int __myfs_mknod_implem(void *fsptr, size_t fssize, int *errnoptr,
     if (allocate_fblock == (off_t)0){
         free(child_name);
         *errnoptr=ENOSPC;
-        printf("enospc3\n\n\n\n\n\n\n");
         return -1;
     }
 
