@@ -533,7 +533,7 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, char *path){
 	//Get length of path string to be passed to malloc
 	//Add 1 to reinclude the null terminator
 	pathlen = strlen(path) + (size_t)1;
-	path_cpy = malloc(pathlen * sizeof(char));
+	path_cpy = (char *) malloc(pathlen * sizeof(char));
 	strcpy(path_cpy,path);
 	
 	token = strtok(path_cpy, "/");
