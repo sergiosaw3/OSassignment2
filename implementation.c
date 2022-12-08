@@ -237,7 +237,11 @@
 
 /* Helper types and functions */
 
-typedef size_t off_t;
+//typedef size_t off_t;
+#define MYFS_MAXIMUM_NAME_LENGTH (255)
+#define MYFS_STATIC_PATH_BUF_SIZE (8192)
+#define MYFS_TRUNCATE_SMALL_ALLOCATE ((size_t) 512)
+#define MYFS_MAGIC (0xCAFEBABE)
 
 typedef enum
 {
@@ -281,14 +285,10 @@ struct __myfs_inode_struct_t{
       struct timespec times[2];
       union{
             __myfs_inode_file_t file;
-            __myfs_indoe_directory_t directory;
+            __myfs_inode_directory_t directory;
       } value;
 }; typedef struct __myfs_inode_struct_t __myfs_inode_t;
 
-#define MYFS_MAXIMUM_NAME_LENGTH (255)
-#define MYFS_STATIC_PATH_BUF_SIZE (8192)
-#define MYFS_TRUNCATE_SMALL_ALLOCATE ((size_t) 512)
-#define MYFS_MAGIC (0xCAFEBABE)
 
 void *__off_to_ptr(__myfs_handle_t handle, off_t offset) {
   if (offset == 0) return NULL;
@@ -381,6 +381,7 @@ off_t __allocate_mem_block(__myfs_handle_t handle, size_t rawsize) {
     }
     return 0;
 }
+void __merge_blocks(__myfs_handle_t handle);
 /*
 Takes the handle and offset of the beginning of the data of a memory block
         The data comes right after the header.
@@ -396,7 +397,7 @@ void __free_mem_block(__myfs_handle_t handle, off_t block_offset) {
         curr = (__myfs_memory_block_t) __off_to_ptr(handle, (prev = curr)->next)){
         if (prev == NULL && curr>block){
             block->next= __ptr_to_off(handle,curr);
-						__merge_blocks(handle);
+            __merge_blocks(handle);
             return;
         }
 
@@ -416,7 +417,7 @@ void __free_mem_block(__myfs_handle_t handle, off_t block_offset) {
     return;
 }
 void __merge_blocks(__myfs_handle_t handle) {
-	__myfs_memory_block_t next, curr, new;
+	__myfs_memory_block_t next, curr;
 	curr = (__myfs_memory_block_t) __off_to_ptr(handle,handle->free_memory);
 	
 	while(curr->next != 0) {
@@ -478,7 +479,7 @@ __myfs_handle_t __myfs_get_handle(void *fsptr, size_t fssize) {
 	__set_curr_time(root, 1);
 	//Set up directory stats a bit.
 	root->value.directory.number_children=2;
-	
+
 	
 	//Mark this memory as taken
 	mem_size -= sizeof(__myfs_inode_t);
@@ -512,7 +513,7 @@ __myfs_handle_t __myfs_get_handle(void *fsptr, size_t fssize) {
 
 
 
-__myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, char *path){
+__myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, const char *path){
 	char *token;
 	int isFound=0;
 	__myfs_inode_t *curr;
@@ -717,7 +718,7 @@ int __myfs_getattr_implem(void *fsptr, size_t fssize, int *errnoptr,
         printf("COUNTER %i\n\n\n\n",counter);
     }
 
-    else if (node->type == REGFILE){
+    else if (node->type == REG_FILE){
         stbuf->st_mode = S_IFREG | 0755;
         stbuf->st_size = node->value.file.size;
         stbuf->st_nlink = 1;
@@ -798,14 +799,14 @@ int __myfs_readdir_implem(void *fsptr, size_t fssize, int *errnoptr,
 	
 	/* Edge case: empty directory.  If this is the case, then dir_to_read ->value.directory.number_chlidern == 2.
 		 If this is the case, then simply return 0 without iteration.*/
-	if(dir_to_read->value.directory.number_chlidern == 2) {
+	if(dir_to_read->value.directory.number_children == 2) {
 		return 0;
 	}
 	
 	/* Regular operation */
 	//Set number that should be reported assuming allocation goes properly.
 	//Should be two less than the number of children because . and .. are chlidren that should not be counted by readdir.
-	number_to_report = dir_to_read->value.directory.number_chlidern - 2;
+	number_to_report = dir_to_read->value.directory.number_children - 2;
 	
 	//Allocate name_list
 	name_list = (char **) calloc(number_to_report, sizeof(char *));
@@ -819,14 +820,14 @@ int __myfs_readdir_implem(void *fsptr, size_t fssize, int *errnoptr,
 	//Set children_array
 	children_array = (off_t *) __off_to_ptr(handle, dir_to_read->value.directory.children);
 	
-	for(iter = 0; iter < number_to_report; iter++;) {
+	for(iter = 0; iter < number_to_report; iter++) {
 		//Get child at iter + 2
 		curr_child = __off_to_ptr(handle, children_array[iter+2]);
 		//Get size to allocate
 		//Get length of string using strlen and add 1 for the null termination
 		namelen = strlen(curr_child->name)+1;
 		//Allocate memory for the name
-		name_list[iter] = (char *) malloc(name_len * sizeof(char));
+		name_list[iter] = (char *) malloc(namelen * sizeof(char));
 		
 		//Check to see if the malloc succeeded or failed
 		if(name_list[iter] == NULL) {
