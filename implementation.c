@@ -664,7 +664,7 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, const char *path){
 
 char * __remove_end_of_path(const char *path) {
 	//Short circuit error check if root dir
-	if(!strcmp(path, "/") return NULL;
+	if(!strcmp(path, "/")) return NULL;
 	//If path does not begin with /, then it is not a valid filepath.
 	if(path[0] != '/') return NULL;
 	
