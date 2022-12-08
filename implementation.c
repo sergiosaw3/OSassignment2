@@ -647,6 +647,74 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, const char *path){
 	free(path_cpy);
 	return curr;
 }
+
+/*  
+		This function truncates the last term off the end of a path
+		This is useful for finding a directory to add a file into
+		
+		REMEMBER TO FREE THE STRING THIS FUNCTION RETURNS WHEN 
+		YOU ARE DONE WITH IT.
+		
+		RETURN: a char array of the appropriate size that has been 
+		allocated with malloc/calloc and contains the path with the 
+		last term removed
+		
+		NULL if root directory
+*/
+
+char * __remove_end_of_path(const char *path) {
+	//Short circuit error check if root dir
+	if(!strcmp(path, "/") return NULL;
+	//If path does not begin with /, then it is not a valid filepath.
+	if(path[0] != '/') return NULL;
+	
+	/* Declare needed variables */
+	char *modifiable_path; //Can be destroyed/modified without messing up the path
+	char *path_to_ret; //Path that will be returned.  Will be null-terminated and just large enough
+	size_t path_length; //Length of the original path for use in iterating backwards
+	size_t iter;  //Used to iterate backwards
+	size_t new_length; //Length of the truncated path
+	
+	//define path_length
+	path_length = strlen(path);
+	//define and fill modifiable_path
+	//Needs to be one longer than the path because strlen does not include the null-terminator
+	modifiable_path = (char *) malloc((path_length + (size_t) 1) * sizeof(char));
+	if(modifiable_path == NULL) return NULL;
+	strcpy(modifiable_path,path);
+	
+	//Get rid of / at the end of the path if there is one
+	if(modifiable_path[path_length - (size_t) 1] == '/'){
+		modifiable_path[path_length - (size_t) 1] = '\0';
+	}
+	
+	//Iterate backwards through the string until a / is encountered
+	//Additionally, set all characters between the end of the path and the last '/' to '\0'
+	//path is guaranteed to at least start with '/'
+	for(iter = path_length; modifiable_path[iter] != '/'; iter --;){
+		modifiable_path[iter] = '\0';
+	}
+	
+	//Get new length
+	new_length = strlen(modifiable_path);
+	
+	//Allocate memory for new path
+	path_to_ret = (char *) malloc((new_length + (size_t) 1) * sizeof(char));
+	
+	//Error check
+	if (path_to_ret == NULL) {
+		free(modifiable_path);
+		return NULL;
+	}
+	
+	strcpy(path_to_ret, modifiable_path);
+	
+	//Free memory
+	free(modifiable_path);
+	return path_to_ret;
+}
+
+
 /* End of helper functions */
 
 /* Implements an emulation of the stat system call on the filesystem 
