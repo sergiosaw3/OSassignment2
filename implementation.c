@@ -1030,6 +1030,7 @@ int __myfs_getattr_implem(void *fsptr, size_t fssize, int *errnoptr,
     node = __myfs_path_resolve(handle,path,errnoptr);
 
     if (node == NULL){
+        *errnoptr = ENOENT;
         return -1;
     }
 
@@ -1638,8 +1639,10 @@ int __myfs_truncate_implem(void *fsptr, size_t fssize, int *errnoptr,
 */
 int __myfs_open_implem(void *fsptr, size_t fssize, int *errnoptr,
                        const char *path) {
-    /* STUB */
-    return -1;
+    uid_t uid = (uid_t)0;
+    gid_t gid = (gid_t)0;
+    struct stat stbuf;
+    return __myfs_getattr_implem(fsptr, fssize, errnoptr, uid, gid, path, &stbuf);
 }
 
 /* Implements an emulation of the read system call on the filesystem
@@ -1700,9 +1703,19 @@ int __myfs_write_implem(void *fsptr, size_t fssize, int *errnoptr,
 int __myfs_utimens_implem(void *fsptr, size_t fssize, int *errnoptr,
                           const char *path, const struct timespec ts[2]) {
     /* Declare variables */
-		__myfs_handle_t handle;
-		__myfs_inode_t file_to_update;
-		
+    __myfs_handle_t handle;
+    __myfs_inode_t file_to_update;
+    if (path == NULL){
+        *errnoptr = EINVAL;
+        return -1;
+    }
+
+    if (strlen(path) > MYFS_STATIC_PATH_BUF_SIZE){
+        *errnoptr = ENAMETOOLONG;
+        return -1;
+    }
+
+
     return -1;
 }
 
