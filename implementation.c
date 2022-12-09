@@ -14,8 +14,9 @@
 
   Contributors: Christoph Lauter
                 Dimitri Lyon
-                ... and
-                ...
+                Diego Sanchez
+		Sergio Velasco and
+                Elton Villa
 
   and based on
 
