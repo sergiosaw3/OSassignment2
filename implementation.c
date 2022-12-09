@@ -739,8 +739,20 @@ __myfs_inode_t * __myfs_path_resolve(__myfs_handle_t handle, const char *path,in
     size_t pathlen;
     char *path_cpy;
 
-    if (path[0] != '/') return NULL;
+    if(path == NULL) {
+        *errnoptr = EFAULT;
+        return NULL;
+    }
 
+    if (path[0] != '/') {
+        *errnoptr = EFAULT;
+        return NULL;
+    }
+
+    if(strlen(path) > MYFS_STATIC_PATH_BUF_SIZE) {
+        *errnoptr = ENAMETOOLONG;
+        return NULL;
+    }
     __myfs_inode_t *root = (__myfs_inode_t *) __off_to_ptr(handle,handle->root_dir);
 
     off_t *children = (off_t *) __off_to_ptr(handle,root->value.directory.children);
@@ -1484,7 +1496,6 @@ int __myfs_mkdir_implem(void *fsptr, size_t fssize, int *errnoptr,
     __myfs_handle_t handle;
     __myfs_inode_t *parentNode; //Directory at path
     __myfs_inode_t *childNode;
-    __myfs_file_block_t *fblock;
     off_t *children;
     off_t *child_children;
     off_t  allocate_inode;
@@ -1704,7 +1715,9 @@ int __myfs_utimens_implem(void *fsptr, size_t fssize, int *errnoptr,
                           const char *path, const struct timespec ts[2]) {
     /* Declare variables */
     __myfs_handle_t handle;
-    __myfs_inode_t file_to_update;
+    handle = __myfs_get_handle(fsptr, fssize);
+
+    __myfs_inode_t *node;
     if (path == NULL){
         *errnoptr = EINVAL;
         return -1;
@@ -1715,8 +1728,17 @@ int __myfs_utimens_implem(void *fsptr, size_t fssize, int *errnoptr,
         return -1;
     }
 
+    node = __myfs_path_resolve(handle,path,errnoptr);
+    //Error handling done in myfspathresolve
+    if (node == NULL){
+        return -1;
+    }
 
-    return -1;
+    node->times[0]=ts[0];
+    node->times[1]=ts[1];
+
+
+    return 0;
 }
 
 /* Implements an emulation of the statfs system call on the filesystem

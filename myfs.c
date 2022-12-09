@@ -38,7 +38,7 @@
 
   ALL YOUR CODE GOES INTO implementation.c !!!
 
-  
+
     gcc -g -O0 -Wall myfs.c implementation.c `pkg-config fuse --cflags --libs` -o myfs
    gdb --args ./myfs --backupfile=test.myfs -f -s -d ~/fuse/
    fusermount -u ~/fuse/
